@@ -1,0 +1,124 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Net.Sockets;
+using System.Net;
+using System.Threading;
+
+namespace Chat_Client
+{
+    class Program
+    {
+        static string usr;
+        static TcpClient client;
+        static NetworkStream netStream;
+
+        static void Main(string[] args)
+        {
+            Console.Write("User name: ");
+            usr = Console.ReadLine();
+            Console.Write("IP: ");
+            string ip = Console.ReadLine();
+            Console.Write("Port: ");
+            int port = Convert.ToInt32(Console.ReadLine()); 
+            Connect(ip, port, usr);
+        }
+
+        static void Connect(string ip, int port, string usr)
+        {
+            IPEndPoint ipe = new IPEndPoint(IPAddress.Parse(ip), port); //IP с номером порта
+            client = new TcpClient(); //подключение клиента
+            try
+            {
+                
+                client.Connect(ipe);
+                netStream = client.GetStream();
+                Thread receiveThread = new Thread(new ParameterizedThreadStart(ReceiveData));//получение данных
+                receiveThread.Start();//старт потока
+                netStream.Write(Encoding.ASCII.GetBytes(usr), 0, Encoding.ASCII.GetBytes(usr).Length);
+                netStream.Flush();
+                Console.WriteLine("Connected!");
+
+
+            }
+            catch
+            {
+                Connect(ip, port,usr);
+            }
+            SendMessage();
+            Disconnect();
+            Console.WriteLine("log off");
+        }
+
+        static void SendMessage()
+        {
+            Console.Write("Message: \n");
+            while (true)
+            {
+                try
+                {
+
+                    string mes = Console.ReadLine();
+                    if (mes == "/l")
+                    {
+                        netStream.Write(Encoding.ASCII.GetBytes(mes), 0, Encoding.ASCII.GetBytes(mes).Length);
+                    }
+                    else if (mes.StartsWith("/w"))
+                    {
+                        netStream.Write(Encoding.ASCII.GetBytes(mes), 0, Encoding.ASCII.GetBytes(mes).Length);
+                    }
+                    else
+                    {
+                        string message = usr + ": " + mes;
+                        byte[] toSend = new byte[64];
+                        byte[] toSend2 = new byte[64];
+
+                        toSend2 = Encoding.ASCII.GetBytes(message);
+                        toSend = Encoding.ASCII.GetBytes(DateTime.Now.ToString());
+                        byte[] toSend3 = new byte[toSend.Length + toSend2.Length + 1];
+                        Array.Copy(toSend, toSend3, toSend.Length);
+                        Array.Copy(toSend2, 0, toSend3, toSend.Length + 1, toSend2.Length);
+                        netStream.Write(toSend3, 0, toSend3.Length);
+                    }
+                    netStream.Flush();
+                }
+                catch
+                {
+                    Console.WriteLine("ERROR");
+                }
+            }
+        }
+
+        static void ReceiveData(object e)
+        {
+            byte[] receiveMessage = new byte[64];
+
+            while (true)
+            {
+                try
+                {
+                    netStream.Read(receiveMessage, 0, 64);//чтение сообщения
+                  
+                }
+                catch
+                {
+                    Console.WriteLine("The connection to the server was interrupted!"); //соединение было прервано
+                    Console.ReadLine();
+                    Disconnect();
+                }
+                string message = Encoding.ASCII.GetString(receiveMessage);
+                Console.WriteLine(message);//вывод сообщения
+                message = null;
+            }
+        }
+
+
+        static void Disconnect()
+        {
+            client.Close();//отключение клиента
+            netStream.Close();//отключение потока
+            Environment.Exit(0); //завершение процесса
+        }
+    }
+}
