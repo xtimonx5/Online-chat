@@ -1,0 +1,184 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Net.Sockets;
+using System.Threading;
+using System.Net;
+
+namespace Server_Chat
+{
+    class Program
+    {
+        static TcpListener tcpListener; //монитор подключений TCP клиентов
+        static Thread listenThread; //создание потока
+
+        static List<TcpClient> clients = new List<TcpClient>(); //список клиентских подключений
+        static List<NetworkStream> netStream = new List<NetworkStream>(); //список потока данных
+        static List<byte[]> names = new List<byte[]>();
+
+        static void Main(string[] args)
+        {
+
+
+            try
+            {
+                Console.WriteLine("Server Started!");
+                tcpListener = new TcpListener(IPAddress.Any, 8888);
+                listenThread = new Thread(new ThreadStart(ListenThread));        
+                listenThread.Start(); //старт 
+                Console.Write(tcpListener.LocalEndpoint);
+            }
+            catch
+            {
+                Disconnect();
+            }
+        }
+
+        static void ListenThread()
+        {
+    
+            tcpListener.Start();
+        
+            
+            byte[] recieve = new byte[64];
+            while (true)
+            {
+                
+                clients.Add(tcpListener.AcceptTcpClient()); //подключение пользователя
+                netStream.Add(clients[clients.Count - 1].GetStream()); //обьект для получения данных
+                netStream[clients.Count - 1].Read(recieve,0, 64);
+                names.Add(recieve);
+                netStream[clients.Count - 1].Flush();
+                Thread clientThread = new Thread(new ParameterizedThreadStart(ClientRecieve));
+                clientThread.Start(clients.Count - 1);
+                ListenThread();  // 
+
+            }
+        }
+
+        static void ClientRecieve(object ID)
+        {
+            int thisID = (int)ID;
+            int command = 0;
+
+            byte[] recieve = new byte[64];
+                while (true)
+            {
+                try
+                {
+                    netStream[thisID].Read(recieve, 0, 64);
+                    if (recieve[0]==47&recieve[1]==108)
+                    {           
+                        SendNamesList(thisID);
+                        command = 1;
+                    }
+                    else if (recieve[0] == 47 & recieve[1] == 119)
+                    {
+                        SendPrivateMessage(thisID, recieve);
+                        command = 1;
+                    }
+
+                }
+                catch
+                {
+                    Console.WriteLine("Client with ID: " + thisID + " has Disconnected!");
+                            clients[thisID].Close();
+                            netStream[thisID].Close(0);
+                            clients[thisID] = null;
+                            netStream[thisID] = null;
+                            names[thisID] = null;
+                            break;
+                }
+                    Console.WriteLine("ID" + thisID + " client's message: " + Encoding.ASCII.GetString(recieve));
+                    if (command != 1)
+                    {
+
+                        SendMessageToClients(recieve, thisID);
+                    }
+                        for (int i = 0; i < 64; i++)
+                    {
+                        recieve[i] = 0;
+                    }
+                    command = 0;
+                
+            }
+        }
+
+
+        static void SendPrivateMessage(int thisID, byte[] recieve)
+        {
+            
+            string mes=Encoding.ASCII.GetString(recieve);
+            string toIdStr = "";
+            string message = "";
+            for (int k = 3; k < 40;k++)
+            {
+                if (Char.IsNumber(mes[k]))
+                {
+                    toIdStr += mes[k];
+                }
+                else
+                {
+                    message += mes[k];
+                }
+            }
+            int toID = Convert.ToInt32(toIdStr);      
+            byte[] send1 = Encoding.ASCII.GetBytes("(private)").Concat(names[thisID]).ToArray();
+            byte[] send2 = new byte[32];
+            for (int i = send1.Length-1; i > 0; i--)
+            {
+                if (send1[i]==0)
+                    Array.Resize(ref send1, send1.Length-1);
+            }
+            byte[] send = send1.Concat(Encoding.ASCII.GetBytes(":")).ToArray();
+            send = send.Concat(Encoding.ASCII.GetBytes(message)).ToArray();
+            Array.Resize(ref send, 64);
+            netStream[toID].Write(send, 0, 64);
+            netStream[toID].Flush();
+        }
+
+        static void SendNamesList(int thisID)
+        {
+            int count = names.Count;
+
+               for (int k=0; k<count;k++)
+                {
+                   if (names[k]!=null & k!=thisID)
+                    {
+                        byte[] id = new byte[5];
+                       id = Encoding.ASCII.GetBytes(k.ToString());
+                      byte[] Send = id.Concat(Encoding.ASCII.GetBytes(" ")).ToArray();
+                      Send = Send.Concat(names[k]).ToArray();
+                     netStream[thisID].Write(Send,0,64);
+                     netStream[thisID].Flush();
+                       }
+                }
+        }
+        static void SendMessageToClients(byte[] toSend, int thisID)
+        {
+          
+            for (int i = 0; i < netStream.Count; i++)
+            {
+            
+                if (i != thisID & netStream[i]!=null)
+                {
+                    netStream[i].Write(toSend, 0, 64); //передача данных
+                    netStream[i].Flush(); //удаление данных с потока
+                    }
+            }
+        }
+
+        static void Disconnect()
+        {
+            tcpListener.Stop(); //остановка чтения
+
+            for (int i = 0; i < clients.Count; i++)
+            {
+                clients[i].Close(); //отключение клиента
+                netStream[i].Close(); //отключение потока
+            }
+            Environment.Exit(0); //завершение процесса
+        }
+    }
+}
