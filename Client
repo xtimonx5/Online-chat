@@ -39,7 +39,7 @@ namespace Chat_Client
                 netStream.Write(Encoding.ASCII.GetBytes(usr), 0, Encoding.ASCII.GetBytes(usr).Length);
                 netStream.Flush();
                 Console.WriteLine("Connected!");
-
+                Console.WriteLine("/? - commands");
 
             }
             catch
@@ -60,7 +60,12 @@ namespace Chat_Client
                 {
 
                     string mes = Console.ReadLine();
-                    if (mes == "/l")
+                    if (mes == "/?")
+                    {
+                        Console.WriteLine("/l - List of online users and their ID's");
+                        Console.WriteLine("/w [id] [message] - private message to User by ID");
+                    }
+                    else if (mes == "/l")
                     {
                         netStream.Write(Encoding.ASCII.GetBytes(mes), 0, Encoding.ASCII.GetBytes(mes).Length);
                     }
